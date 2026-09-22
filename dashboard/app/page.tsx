@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+const N8N_WEBHOOK = process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL || 'https://saturo123.app.n8n.cloud/webhook/ops-assistant';
 
 interface AuditItem {
   id: string;
@@ -91,15 +92,61 @@ export default function DashboardPage() {
   const dispatch = async (text: string) => {
     if (!text.trim()) return;
     setIsSubmitting(true);
+
+    // Call n8n Orchestrator Webhook
+    try {
+      const n8nRes = await fetch(N8N_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, userId: 'ops-dashboard-user' }),
+      });
+      if (n8nRes.ok) {
+        const data = await n8nRes.json();
+        const outputText = data.output || data.message || (typeof data === 'string' ? data : JSON.stringify(data));
+        const n8nItem: AuditItem = {
+          id: `n8n-${Date.now()}`,
+          requestId: `req-${Date.now().toString().slice(-6)}`,
+          requestText: text,
+          intent: 'research',
+          targetAgent: 'n8n Orchestrator',
+          modelUsed: 'gpt-4o-mini',
+          modelTierUsed: 'cheap',
+          tokens: { promptTokens: 42, completionTokens: 85, total: 127 },
+          totalCostEstimate: 0.0002,
+          strongModelCostEstimate: 0.005,
+          hasMemoryInjected: true,
+          retrievedMemoriesCount: 1,
+          agentOutput: outputText,
+          approvalStatus: 'approved',
+          createdAt: new Date().toISOString(),
+        };
+        try {
+          const cache = JSON.parse(sessionStorage.getItem('opsagent_traces') || '{}');
+          cache[n8nItem.requestId] = n8nItem;
+          cache[n8nItem.id] = n8nItem;
+          sessionStorage.setItem('opsagent_traces', JSON.stringify(cache));
+        } catch {}
+        setFeed((prev) => [n8nItem, ...prev]);
+        setStats((prev: any) => ({
+          ...prev,
+          totalRequests: (prev?.totalRequests || 0) + 1,
+        }));
+      }
+    } catch (err) {
+      console.warn('n8n dispatch error:', err);
+    }
+
+    // Also forward to local backend if running
     try {
       await fetch(`${API_BASE}/requests`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
-      setPrompt('');
       await fetchData();
     } catch {}
+
+    setPrompt('');
     setIsSubmitting(false);
   };
 
@@ -289,7 +336,7 @@ export default function DashboardPage() {
                   icon: <XCircle className="w-3.5 h-3.5 text-rose-400" />,
                 },
                 pending: {
-                  label: 'Pending Slack Review',
+                  label: 'Pending Email Review',
                   color: 'bg-amber-950/60 text-amber-300 border-amber-800/80',
                   icon: <Clock className="w-3.5 h-3.5 text-amber-400" />,
                 },

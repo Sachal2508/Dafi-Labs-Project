@@ -30,10 +30,35 @@ export default function RequestTracePage() {
 
   useEffect(() => {
     if (!requestId) return;
+
+    // Check session storage cache first
+    try {
+      const cache = JSON.parse(sessionStorage.getItem('opsagent_traces') || '{}');
+      if (cache[requestId]) {
+        setRecord(cache[requestId]);
+        setLoading(false);
+      }
+    } catch {}
+
     fetch(`${API_BASE}/audit/requests/${requestId}`)
-      .then((r) => r.json())
-      .then(setRecord)
-      .catch(console.error)
+      .then(async (r) => {
+        if (!r.ok) throw new Error('Not found in backend');
+        return r.json();
+      })
+      .then((data) => {
+        if (data && !data.error) {
+          setRecord(data);
+        }
+      })
+      .catch(() => {
+        // If backend fails, check cache again
+        try {
+          const cache = JSON.parse(sessionStorage.getItem('opsagent_traces') || '{}');
+          if (cache[requestId]) {
+            setRecord(cache[requestId]);
+          }
+        } catch {}
+      })
       .finally(() => setLoading(false));
   }, [requestId]);
 
@@ -202,10 +227,10 @@ export default function RequestTracePage() {
         </div>
       </div>
 
-      {/* Slack Human Decision Outcome */}
+      {/* Human Decision Outcome */}
       <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-300">Human Decision in Slack</span>
+          <span className="text-xs font-semibold text-slate-300">Human Decision (Email Approval)</span>
           {record.decidedBy && (
             <span className="text-xs text-slate-400 flex items-center gap-1">
               <User className="w-3.5 h-3.5 text-slate-500" /> @{record.decidedBy}
@@ -222,7 +247,7 @@ export default function RequestTracePage() {
           </div>
         ) : record.approvalStatus === 'approved' ? (
           <p className="text-xs text-emerald-400 font-medium">
-            ✓ Approved without edits. Decision saved to pgvector memory.
+            ✓ Approved. Decision saved to memory.
           </p>
         ) : record.approvalStatus === 'rejected' ? (
           <p className="text-xs text-rose-400 font-medium">
@@ -230,7 +255,7 @@ export default function RequestTracePage() {
           </p>
         ) : (
           <p className="text-xs text-amber-400 font-medium">
-            ⏳ Waiting for operator to click Approve, Edit, or Reject in Slack.
+            ⏳ Waiting for operator to click Approve or Reject in Email.
           </p>
         )}
       </div>

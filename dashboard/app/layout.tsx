@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="flex items-center gap-3 text-xs text-slate-400">
               <span className="inline-flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-emerald-400" />
-                Slack Approval Required
+                HITL Email Approval Required
               </span>
               <span className="text-slate-700">•</span>
               <span className="inline-flex items-center gap-1.5">
